@@ -228,9 +228,7 @@ function ProfileModal({ user, onClose }) {
   useEffect(() => {
     async function load() {
       const snap = await getDoc(doc(db, "users", user.uid));
-      if (snap.exists()) {
-        setProfile(snap.data());
-      }
+      if (snap.exists()) setProfile(snap.data());
     }
 
     load();
@@ -346,7 +344,7 @@ function RoomCreator({ user, onCreated }) {
     setError("");
 
     try {
-      let members = [user.uid];
+      const members = [user.uid];
 
       if (memberEmail.trim()) {
         const memberQuery = query(
@@ -354,13 +352,15 @@ function RoomCreator({ user, onCreated }) {
           where("email", "==", memberEmail.trim()),
           limit(1)
         );
+
         const snap = await getDocs(memberQuery);
-        snap.forEach((d) => members.push(d.id));
 
         if (snap.empty) {
           setError("No registered user found with that email.");
           return;
         }
+
+        snap.forEach((d) => members.push(d.id));
       }
 
       const room = await addDoc(collection(db, "rooms"), {
@@ -397,6 +397,7 @@ function RoomCreator({ user, onCreated }) {
         placeholder="Invite by email"
       />
       {error && <small className="inline-error">{error}</small>}
+
       <div className="room-form-actions">
         <button className="primary-btn">Create</button>
         <button className="ghost-btn" type="button" onClick={() => setOpen(false)}>
@@ -502,11 +503,13 @@ function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply })
           <button onClick={() => onReply(message)} title="Reply" aria-label="Reply message">
             <Reply size={15} />
           </button>
+
           {mine && (
             <button onClick={() => onEdit(message)} title="Edit" aria-label="Edit message">
               <Edit2 size={15} />
             </button>
           )}
+
           {mine && (
             <button
               onClick={() => deleteDoc(doc(db, "rooms", message.roomId, "messages", message.id))}
@@ -568,9 +571,7 @@ function ChatWindow({ user, roomId }) {
 
       for (const id of ids) {
         const snap = await getDoc(doc(db, "users", id));
-        if (snap.exists()) {
-          next[id] = snap.data();
-        }
+        if (snap.exists()) next[id] = snap.data();
       }
 
       setProfiles(next);
@@ -798,9 +799,7 @@ function App() {
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setRooms(rows);
 
-      if (!selectedRoomId && rows[0]) {
-        setSelectedRoomId(rows[0].id);
-      }
+      if (!selectedRoomId && rows[0]) setSelectedRoomId(rows[0].id);
     });
 
     return () => unsub();
