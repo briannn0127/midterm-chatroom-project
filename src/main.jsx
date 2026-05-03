@@ -26,7 +26,7 @@ import {
   where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { Bell, Edit2, Image, LogOut, MessageCircle, Plus, Reply, Search, Trash2, User, X } from "lucide-react";
+import { Bell, Edit2, Image, LogOut, MailPlus, MessageCircle, Plus, Reply, Search, Trash2, User, X } from "lucide-react";
 import { auth, db, googleProvider, storage } from "./firebase/config";
 import "./styles/app.css";
 
@@ -245,30 +245,48 @@ function RoomCreator({ user, onCreated }) {
 }
 
 function InviteMember({ roomId }) {
+  const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
 
   async function invite(e) {
     e.preventDefault();
     setMessage("");
+
     const q = query(collection(db, "users"), where("email", "==", email.trim()), limit(1));
     const snap = await getDocs(q);
+
     if (snap.empty) {
       setMessage("No registered user found.");
       return;
     }
+
     const uid = snap.docs[0].id;
     await updateDoc(doc(db, "rooms", roomId), { members: arrayUnion(uid) });
+
     setEmail("");
     setMessage("Invited.");
+    setOpen(false);
   }
 
   return (
-    <form className="invite-bar" onSubmit={invite}>
-      <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Invite member by email" />
-      <button className="ghost-btn">Invite</button>
-      {message && <small>{message}</small>}
-    </form>
+  <>
+      <button className="circle-tool-btn" onClick={() => setOpen(v => !v)} title="Invite member">
+        <MailPlus size={22} />
+      </button>
+
+      {open && (
+        <form className="floating-tool-form" onSubmit={invite}>
+          <input
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="Invite by email"
+          />
+          <button className="primary-btn">Invite</button>
+          {message && <small>{message}</small>}
+        </form>
+      )}
+    </>
   );
 }
 
@@ -413,10 +431,26 @@ function ChatWindow({ user, roomId }) {
         </div>
         <button className="ghost-btn" onClick={askNotificationPermission}><Bell size={16} /> Enable notification</button>
       </header>
-      <InviteMember roomId={roomId} />
-      <div className="search-row">
-        <Search size={18} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search all messages in this room" />
+      <div className="chat-tools">
+        <InviteMember roomId={roomId} />
+
+        <button
+          className="circle-tool-btn"
+          onClick={() => setSearch(search === "__OPEN__" ? "" : "__OPEN__")}
+          title="Search messages"
+        >
+          <Search size={22} />
+        </button>
+
+        {(search === "__OPEN__" || (search !== "" && search !== "__OPEN__")) && (
+          <input
+            className="compact-search-input"
+            autoFocus
+            value={search === "__OPEN__" ? "" : search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search messages"
+          />
+        )}
       </div>
       <div className="message-list">
         {filtered.map(msg => (
