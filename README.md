@@ -2,6 +2,11 @@
 
 This project is a React + Firebase chatroom web app for the CS2410 Software Studio midterm project.
 
+## Links
+
+- GitHub: https://github.com/briannn0127/midterm-chatroom-project
+- Firebase Hosting: 尚未部署，部署後補上
+
 ## Features
 
 ### Basic Components
