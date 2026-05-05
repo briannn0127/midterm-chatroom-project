@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import {
   addDoc,
+  arrayRemove,
   arrayUnion,
   collection,
   deleteDoc,
@@ -38,6 +39,7 @@ import {
   Search,
   Trash2,
   User,
+  UserX,
   X
 } from "lucide-react";
 import { auth, db, googleProvider, storage } from "./firebase/config";
@@ -50,6 +52,7 @@ const defaultProfile = (user) => ({
   photoURL: user.photoURL || "",
   phone: "",
   address: "",
+  blockedUsers: [],
   createdAt: serverTimestamp()
 });
 
@@ -257,6 +260,7 @@ function ProfileModal({ user, onClose }) {
           phone: profile.phone || "",
           address: profile.address || "",
           photoURL,
+          blockedUsers: profile.blockedUsers || [],
           updatedAt: serverTimestamp()
         },
         { merge: true }
@@ -464,6 +468,110 @@ function InviteMember({ roomId }) {
   );
 }
 
+
+function BlockUserTool({ user, room }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [myProfile, setMyProfile] = useState(null);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (snap.exists()) setMyProfile(snap.data());
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  async function blockByEmail(e) {
+    e.preventDefault();
+    setMessage("");
+
+    if (!email.trim()) return;
+
+    try {
+      const q = query(collection(db, "users"), where("email", "==", email.trim()), limit(1));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setMessage("No registered user found.");
+        return;
+      }
+
+      const targetDoc = snap.docs[0];
+      const targetUid = targetDoc.id;
+
+      if (targetUid === user.uid) {
+        setMessage("You cannot block yourself.");
+        return;
+      }
+
+      if (room?.members && !room.members.includes(targetUid)) {
+        setMessage("This user is not in this room.");
+        return;
+      }
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        { blockedUsers: arrayUnion(targetUid), updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+
+      setEmail("");
+      setMessage("Blocked.");
+      setOpen(false);
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  async function unblock(uid) {
+    await updateDoc(doc(db, "users", user.uid), {
+      blockedUsers: arrayRemove(uid),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  const blockedUsers = myProfile?.blockedUsers || [];
+
+  return (
+    <>
+      <button
+        className={open ? "circle-tool-btn danger active" : "circle-tool-btn danger"}
+        onClick={() => setOpen((v) => !v)}
+        title="Block user"
+        aria-label="Block user"
+      >
+        <UserX size={20} />
+      </button>
+
+      {open && (
+        <form className="floating-tool-form" onSubmit={blockByEmail}>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Block by email"
+            autoFocus
+          />
+          <button className="primary-btn small-btn danger-btn">Block</button>
+          {message && <small className="tool-message">{message}</small>}
+        </form>
+      )}
+
+      {open && blockedUsers.length > 0 && (
+        <div className="blocked-list">
+          {blockedUsers.map((uid) => (
+            <button key={uid} type="button" onClick={() => unblock(uid)}>
+              Unblock {uid.slice(0, 6)}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+
 function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply }) {
   const mine = message.senderId === user.uid;
   const sender = profiles[message.senderId] || {};
@@ -529,6 +637,7 @@ function ChatWindow({ user, roomId }) {
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [profiles, setProfiles] = useState({});
+  const [myProfile, setMyProfile] = useState(null);
   const [text, setText] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -563,6 +672,15 @@ function ChatWindow({ user, roomId }) {
       unsubMsg();
     };
   }, [roomId, user.uid]);
+
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (snap.exists()) setMyProfile(snap.data());
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   useEffect(() => {
     async function loadProfiles() {
@@ -601,6 +719,11 @@ function ChatWindow({ user, roomId }) {
   async function sendMessage(e) {
     e.preventDefault();
     if (!text.trim() && !imageFile) return;
+
+    if (directChatBlocked) {
+      alert("This direct chat is blocked. Messages cannot be sent.");
+      return;
+    }
 
     try {
       let imageUrl = "";
@@ -666,11 +789,40 @@ function ChatWindow({ user, roomId }) {
     setText("");
   }
 
+  const blockedByMe = myProfile?.blockedUsers || [];
+
+  const blockedMe = useMemo(() => {
+    return Object.entries(profiles)
+      .filter(([, profile]) => (profile.blockedUsers || []).includes(user.uid))
+      .map(([uid]) => uid);
+  }, [profiles, user.uid]);
+
+  const visibleMessages = useMemo(() => {
+    return messages.filter((m) => {
+      const senderBlockedByMe = blockedByMe.includes(m.senderId);
+      const senderBlockedMe = blockedMe.includes(m.senderId);
+      return !senderBlockedByMe && !senderBlockedMe;
+    });
+  }, [messages, blockedByMe, blockedMe]);
+
+  const directChatBlocked = useMemo(() => {
+    if (!room?.members || room.members.length !== 2) return false;
+    const otherUid = room.members.find((uid) => uid !== user.uid);
+    if (!otherUid) return false;
+
+    const otherProfile = profiles[otherUid];
+    const otherBlockedMe = (otherProfile?.blockedUsers || []).includes(user.uid);
+    const iBlockedOther = blockedByMe.includes(otherUid);
+
+    return otherBlockedMe || iBlockedOther;
+  }, [room, profiles, user.uid, blockedByMe]);
+
   const filtered = useMemo(() => {
     const key = search.trim().toLowerCase();
-    if (!key) return messages;
-    return messages.filter((m) => (m.text || "").toLowerCase().includes(key));
-  }, [messages, search]);
+    const source = visibleMessages;
+    if (!key) return source;
+    return source.filter((m) => (m.text || "").toLowerCase().includes(key));
+  }, [visibleMessages, search]);
 
   if (!roomId) {
     return (
@@ -701,6 +853,7 @@ function ChatWindow({ user, roomId }) {
 
       <div className="chat-tools" aria-label="Chat tools">
         <InviteMember roomId={roomId} />
+        <BlockUserTool user={user} room={room} />
 
         <button
           className={searchOpen ? "circle-tool-btn active" : "circle-tool-btn"}
@@ -730,6 +883,12 @@ function ChatWindow({ user, roomId }) {
           </button>
         )}
       </div>
+
+      {directChatBlocked && (
+        <div className="block-warning">
+          This direct chat is blocked. You can still view allowed history, but new messages are disabled.
+        </div>
+      )}
 
       <div className="message-list" aria-live="polite">
         {filtered.length === 0 ? (
@@ -766,7 +925,7 @@ function ChatWindow({ user, roomId }) {
         </div>
       )}
 
-      <form className="composer" onSubmit={sendMessage}>
+      <form className={directChatBlocked ? "composer disabled" : "composer"} onSubmit={sendMessage}>
         <label className="icon-upload" aria-label="Upload image">
           <Image size={20} />
           <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
@@ -774,12 +933,15 @@ function ChatWindow({ user, roomId }) {
 
         <input
           ref={inputRef}
+          disabled={directChatBlocked}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={imageFile ? `Image selected: ${imageFile.name}` : "Type a message"}
         />
 
-        <button className="primary-btn send-btn">{editing ? "Save" : "Send"}</button>
+        <button className="primary-btn send-btn" disabled={directChatBlocked}>
+          {editing ? "Save" : "Send"}
+        </button>
       </form>
     </section>
   );
