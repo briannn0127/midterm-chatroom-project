@@ -798,10 +798,10 @@ function RoomMembersModal({ user, room, profiles, myProfile, onClose, onOpenProf
 }
 
 
-function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply }) {
+function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply, onReact }) {
   const mine = message.senderId === user.uid;
   const sender = profiles[message.senderId] || {};
-  const safeText = escapeText(message.text || "");
+
 
   return (
     <article id={`message-${message.id}`} className={`message ${mine ? "mine" : "theirs"} message-enter`}>
@@ -828,9 +828,29 @@ function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply })
         <img className="chat-image" src={message.imageUrl} alt="uploaded message" loading="lazy" />
       )}
 
-      {message.text && <p dangerouslySetInnerHTML={{ __html: safeText }} />}
+      {message.text && <p>{message.text}</p>}
 
       <div className="message-footer">
+        <div className="message-reactions" aria-label="Message reactions">
+          {["👍", "❤️", "😂"].map((emoji) => {
+            const reactedUsers = message.reactions?.[emoji] || [];
+            const active = reactedUsers.includes(user.uid);
+
+            return (
+              <button
+                key={emoji}
+                type="button"
+                className={active ? "reaction-btn active" : "reaction-btn"}
+                onClick={() => onReact(message.id, emoji)}
+                aria-label={`React with ${emoji}`}
+              >
+                <span>{emoji}</span>
+                {reactedUsers.length > 0 && <small>{reactedUsers.length}</small>}
+              </button>
+            );
+          })}
+        </div>
+
         {message.edited && <small className="edited-label">edited</small>}
 
         <div className="message-actions">
@@ -873,8 +893,51 @@ function ChatWindow({ user, roomId }) {
   const [replyTo, setReplyTo] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const hasLoadedMessagesRef = useRef(false);
+  const knownMessageIdsRef = useRef(new Set());
+  const isWindowFocusedRef = useRef(true);
+  const profilesRef = useRef({});
+  const roomRef = useRef(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [notificationEnabled, setNotificationEnabled] = useState(() => {
+    return localStorage.getItem("chatroomNotificationEnabled") === "true";
+  });
   const [viewingMember, setViewingMember] = useState(null);
+
+
+  useEffect(() => {
+    function handleFocus() {
+      isWindowFocusedRef.current = true;
+      setUnreadMap((prev) => ({ ...prev, [roomId]: 0 }));
+    }
+
+    function handleBlur() {
+      isWindowFocusedRef.current = false;
+    }
+
+    function handleVisibilityChange() {
+      isWindowFocusedRef.current = !document.hidden;
+      if (!document.hidden) {
+        setUnreadMap((prev) => ({ ...prev, [roomId]: 0 }));
+      }
+    }
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    hasLoadedMessagesRef.current = false;
+    knownMessageIdsRef.current = new Set();
+    setUnreadMap((prev) => ({ ...prev, [roomId]: 0 }));
+  }, [roomId]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -890,10 +953,52 @@ function ChatWindow({ user, roomId }) {
       const rows = snap.docs.map((d) => ({ id: d.id, roomId, ...d.data() }));
       setMessages(rows);
 
-      const last = rows[rows.length - 1];
-      if (last && last.senderId !== user.uid && document.hidden && Notification.permission === "granted") {
-        new Notification("Unread chat message", { body: last.text || "New image message" });
+      const addedMessages = snap
+        .docChanges()
+        .filter((change) => change.type === "added")
+        .map((change) => ({ id: change.doc.id, roomId, ...change.doc.data() }));
+
+      const isInitialLoad = !hasLoadedMessagesRef.current;
+
+      if (isInitialLoad) {
+        knownMessageIdsRef.current = new Set(rows.map((msg) => msg.id));
+        hasLoadedMessagesRef.current = true;
+        return;
       }
+
+      addedMessages.forEach((msg) => {
+        if (knownMessageIdsRef.current.has(msg.id)) return;
+        knownMessageIdsRef.current.add(msg.id);
+
+        const isFromOtherUser = msg.senderId !== user.uid;
+        const isUnread = document.hidden || !isWindowFocusedRef.current;
+
+        if (isFromOtherUser && isUnread) {
+          setUnreadMap((prev) => ({
+            ...prev,
+            [roomId]: (prev[roomId] || 0) + 1
+          }));
+
+          if (
+            notificationEnabled &&
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
+            const senderName =
+              profilesRef.current[msg.senderId]?.username ||
+              profilesRef.current[msg.senderId]?.email ||
+              "Someone";
+            const roomName = roomRef.current?.name || "Chatroom";
+            const bodyText = msg.text ? `${senderName}: ${msg.text}` : `${senderName}: sent an image`;
+
+            new Notification(`Unread message · ${roomName}`, {
+              body: bodyText,
+              tag: `room-${roomId}`,
+              renotify: true
+            });
+          }
+        }
+      });
     });
 
     return () => {
@@ -910,6 +1015,14 @@ function ChatWindow({ user, roomId }) {
     });
     return () => unsub();
   }, [user?.uid]);
+
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
 
   useEffect(() => {
     async function loadProfiles() {
@@ -937,11 +1050,36 @@ function ChatWindow({ user, roomId }) {
       return;
     }
 
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      new Notification("Notification enabled", {
-        body: "You will receive unread message alerts."
+    if (notificationEnabled) {
+      setNotificationEnabled(false);
+      localStorage.setItem("chatroomNotificationEnabled", "false");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      setNotificationEnabled(true);
+      localStorage.setItem("chatroomNotificationEnabled", "true");
+
+      new Notification("Unread notification enabled", {
+        body: "You will receive alerts only for unread messages."
       });
+
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    if (permission === "granted") {
+      setNotificationEnabled(true);
+      localStorage.setItem("chatroomNotificationEnabled", "true");
+
+      new Notification("Unread notification enabled", {
+        body: "You will receive alerts only for unread messages."
+      });
+    } else {
+      setNotificationEnabled(false);
+      localStorage.setItem("chatroomNotificationEnabled", "false");
+      alert("Notification permission was not granted.");
     }
   }
 
@@ -950,7 +1088,7 @@ function ChatWindow({ user, roomId }) {
     if (!text.trim() && !imageFile) return;
 
     if (directChatBlocked) {
-      alert("This direct chat is blocked. Messages cannot be sent.");
+      alert("This direct chat is blocked. Messages cannot be sent anymore.");
       return;
     }
 
@@ -987,6 +1125,24 @@ function ChatWindow({ user, roomId }) {
       inputRef.current?.focus();
     } catch (err) {
       alert(`Message failed: ${err.message}`);
+    }
+  }
+
+  async function toggleReaction(messageId, emoji) {
+    if (!roomId || !user?.uid) return;
+
+    const targetMessage = messages.find((m) => m.id === messageId);
+    const reactedUsers = targetMessage?.reactions?.[emoji] || [];
+    const alreadyReacted = reactedUsers.includes(user.uid);
+
+    try {
+      await updateDoc(doc(db, "rooms", roomId, "messages", messageId), {
+        [`reactions.${emoji}`]: alreadyReacted
+          ? arrayRemove(user.uid)
+          : arrayUnion(user.uid)
+      });
+    } catch (err) {
+      alert(`Reaction failed: ${err.message}`);
     }
   }
 
@@ -1071,12 +1227,26 @@ function ChatWindow({ user, roomId }) {
         <button type="button" className="room-summary-button" onClick={() => setMembersOpen(true)}>
           <span className="eyebrow">Current room</span>
           <h2>{room?.name || "Chatroom"}</h2>
-          <p>{room?.members?.length || 0} members · manage members</p>
+          <p>
+            {room?.members?.length || 0} members · manage members
+            {unreadMap[roomId] > 0 ? ` · ${unreadMap[roomId]} unread` : ""}
+          </p>
         </button>
 
-        <button className="ghost-btn notification-btn" onClick={askNotificationPermission}>
-          <Bell size={16} />
-          Enable notification
+        <button
+          className={
+            notificationEnabled
+              ? "ghost-btn notification-btn enabled"
+              : "ghost-btn notification-btn"
+          }
+          onClick={askNotificationPermission}
+          title={
+            notificationEnabled
+              ? "Unread notification enabled"
+              : "Enable unread notification"
+          }
+        >
+          <Bell size={18} />
         </button>
       </header>
 
@@ -1131,6 +1301,12 @@ function ChatWindow({ user, roomId }) {
         </div>
       )}
 
+      {directChatBlocked && (
+        <div className="direct-block-warning" role="alert">
+          This direct chat is blocked. Messages cannot be sent anymore.
+        </div>
+      )}
+
       <div className="message-list" aria-live="polite">
         {filtered.length === 0 ? (
           <div className="empty-thread">
@@ -1148,6 +1324,7 @@ function ChatWindow({ user, roomId }) {
               onEdit={startEdit}
               onReply={startReply}
               onFocusReply={focusReply}
+              onReact={toggleReaction}
             />
           ))
         )}
@@ -1195,18 +1372,47 @@ function App() {
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) {
+      setRooms([]);
+      setSelectedRoomId(null);
+      return;
+    }
 
-    const q = query(collection(db, "rooms"), where("members", "array-contains", user.uid));
+    setRooms([]);
+    setSelectedRoomId(null);
+
+    const q = query(
+      collection(db, "rooms"),
+      where("members", "array-contains", user.uid)
+    );
+
     const unsub = onSnapshot(q, (snap) => {
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const rows = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
+
       setRooms(rows);
 
-      if (!selectedRoomId && rows[0]) setSelectedRoomId(rows[0].id);
+      setSelectedRoomId((currentId) => {
+        if (rows.length === 0) {
+          return null;
+        }
+
+        const stillExists = rows.some(
+          (room) => room.id === currentId
+        );
+
+        if (stillExists) {
+          return currentId;
+        }
+
+        return rows[0].id;
+      });
     });
 
     return () => unsub();
-  }, [user, selectedRoomId]);
+  }, [user?.uid]);
 
   if (loading) return <main className="loading-screen">Loading...</main>;
   if (!user) return <AuthPage />;
@@ -1254,7 +1460,11 @@ function App() {
         </button>
       </aside>
 
-      <ChatWindow user={user} roomId={selectedRoomId} />
+      <ChatWindow
+        key={`${user?.uid}-${selectedRoomId || "empty"}`}
+        user={user}
+        roomId={selectedRoomId}
+      />
 
       {profileOpen && <ProfileModal user={user} onClose={() => setProfileOpen(false)} />}
     </main>
