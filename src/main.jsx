@@ -862,6 +862,7 @@ function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply })
 function ChatWindow({ user, roomId }) {
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [unreadMap, setUnreadMap] = useState({});
   const [profiles, setProfiles] = useState({});
   const [myProfile, setMyProfile] = useState(null);
   const [text, setText] = useState("");
