@@ -412,99 +412,29 @@ function RoomCreator({ user, onCreated }) {
   );
 }
 
-function UserSearchDropdown({
-  currentUser,
-  room,
-  mode,
-  icon,
-  buttonClassName = "circle-tool-btn",
-  buttonTitle,
-  placeholder,
-  onSelect,
-  disabledUserIds = []
-}) {
+function InviteMember({ roomId }) {
   const [open, setOpen] = useState(false);
-  const [keyword, setKeyword] = useState("");
-  const [results, setResults] = useState([]);
+  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const searchBoxRef = useRef(null);
 
-  useEffect(() => {
-    function closeWhenClickOutside(e) {
-      if (!searchBoxRef.current) return;
-      if (!searchBoxRef.current.contains(e.target)) {
-        setOpen(false);
-        setKeyword("");
-        setResults([]);
-        setMessage("");
-      }
-    }
+  async function invite(e) {
+    e.preventDefault();
+    setMessage("");
 
-    document.addEventListener("mousedown", closeWhenClickOutside);
-    return () => document.removeEventListener("mousedown", closeWhenClickOutside);
-  }, []);
+    try {
+      const q = query(collection(db, "users"), where("email", "==", email.trim()), limit(1));
+      const snap = await getDocs(q);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function searchUsers() {
-      const key = keyword.trim();
-      setMessage("");
-
-      if (!key) {
-        setResults([]);
+      if (snap.empty) {
+        setMessage("No registered user found.");
         return;
       }
 
-      try {
-        const usernameQuery = query(
-          collection(db, "users"),
-          where("username", ">=", key),
-          where("username", "<=", key + "\uf8ff"),
-          limit(8)
-        );
+      const uid = snap.docs[0].id;
+      await updateDoc(doc(db, "rooms", roomId), { members: arrayUnion(uid) });
 
-        const emailQuery = query(
-          collection(db, "users"),
-          where("email", ">=", key),
-          where("email", "<=", key + "\uf8ff"),
-          limit(8)
-        );
-
-        const [usernameSnap, emailSnap] = await Promise.all([getDocs(usernameQuery), getDocs(emailQuery)]);
-        const map = new Map();
-
-        [...usernameSnap.docs, ...emailSnap.docs].forEach((d) => {
-          if (d.id !== currentUser?.uid) {
-            map.set(d.id, { id: d.id, ...d.data() });
-          }
-        });
-
-        const rows = [...map.values()].filter((u) => {
-          if (disabledUserIds.includes(u.id)) return false;
-          if (mode === "room-only" && room?.members && !room.members.includes(u.id)) return false;
-          return true;
-        });
-
-        if (!cancelled) setResults(rows);
-      } catch (err) {
-        if (!cancelled) setMessage(err.message);
-      }
-    }
-
-    const timer = setTimeout(searchUsers, 180);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [keyword, currentUser?.uid, room?.members, disabledUserIds, mode]);
-
-  async function handleSelect(targetUser) {
-    try {
-      await onSelect(targetUser);
-      setMessage(mode === "invite" ? "Invited." : "Blocked.");
-      setKeyword("");
-      setResults([]);
+      setEmail("");
+      setMessage("Invited.");
       setOpen(false);
     } catch (err) {
       setMessage(err.message);
@@ -512,91 +442,38 @@ function UserSearchDropdown({
   }
 
   return (
-    <div className="user-lookup" ref={searchBoxRef}>
+    <>
       <button
-        type="button"
-        className={open ? `${buttonClassName} active` : buttonClassName}
-        onClick={() => {
-          setOpen((v) => !v);
-          setKeyword("");
-          setResults([]);
-          setMessage("");
-        }}
-        title={buttonTitle}
-        aria-label={buttonTitle}
+        className={open ? "circle-tool-btn active" : "circle-tool-btn"}
+        onClick={() => setOpen((v) => !v)}
+        title="Invite member"
+        aria-label="Invite member"
       >
-        {icon}
+        <MailPlus size={20} />
       </button>
 
       {open && (
-        <div className="user-lookup-popover">
+        <form className="floating-tool-form" onSubmit={invite}>
           <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder={placeholder}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Invite by email"
             autoFocus
           />
-
+          <button className="primary-btn small-btn">Invite</button>
           {message && <small className="tool-message">{message}</small>}
-
-          {keyword.trim() && results.length === 0 && !message && (
-            <div className="lookup-empty">No matching users.</div>
-          )}
-
-          {results.length > 0 && (
-            <div className="lookup-results">
-              {results.map((u) => (
-                <button key={u.id} type="button" className="lookup-user" onClick={() => handleSelect(u)}>
-                  {u.photoURL ? (
-                    <img src={u.photoURL} alt={u.username || u.email || "user"} />
-                  ) : (
-                    <span className="lookup-avatar-fallback">
-                      {(u.username || u.email || "?").charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                  <span>
-                    <strong>{u.username || "Unnamed user"}</strong>
-                    <small>{u.email || u.id}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        </form>
       )}
-    </div>
+    </>
   );
 }
 
-function InviteMember({ roomId, room, user }) {
-  async function invite(targetUser) {
-    if (!roomId) return;
-    if (room?.members?.includes(targetUser.id)) {
-      throw new Error("This user is already in the room.");
-    }
 
-    await updateDoc(doc(db, "rooms", roomId), {
-      members: arrayUnion(targetUser.id)
-    });
-  }
-
-  return (
-    <UserSearchDropdown
-      currentUser={user}
-      room={room}
-      mode="invite"
-      icon={<MailPlus size={20} />}
-      buttonTitle="Invite member"
-      placeholder="Search username to invite"
-      onSelect={invite}
-      disabledUserIds={room?.members || []}
-    />
-  );
-}
-
-function BlockUserTool({ user, room, profiles }) {
+function BlockUserTool({ user, room }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
   const [myProfile, setMyProfile] = useState(null);
-  const [managerOpen, setManagerOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -606,20 +483,46 @@ function BlockUserTool({ user, room, profiles }) {
     return () => unsub();
   }, [user?.uid]);
 
-  async function block(targetUser) {
-    if (!targetUser?.id || targetUser.id === user.uid) {
-      throw new Error("You cannot block yourself.");
-    }
+  async function blockByEmail(e) {
+    e.preventDefault();
+    setMessage("");
 
-    if (room?.members && !room.members.includes(targetUser.id)) {
-      throw new Error("This user is not in this room.");
-    }
+    if (!email.trim()) return;
 
-    await setDoc(
-      doc(db, "users", user.uid),
-      { blockedUsers: arrayUnion(targetUser.id), updatedAt: serverTimestamp() },
-      { merge: true }
-    );
+    try {
+      const q = query(collection(db, "users"), where("email", "==", email.trim()), limit(1));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setMessage("No registered user found.");
+        return;
+      }
+
+      const targetDoc = snap.docs[0];
+      const targetUid = targetDoc.id;
+
+      if (targetUid === user.uid) {
+        setMessage("You cannot block yourself.");
+        return;
+      }
+
+      if (room?.members && !room.members.includes(targetUid)) {
+        setMessage("This user is not in this room.");
+        return;
+      }
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        { blockedUsers: arrayUnion(targetUid), updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+
+      setEmail("");
+      setMessage("Blocked.");
+      setOpen(false);
+    } catch (err) {
+      setMessage(err.message);
+    }
   }
 
   async function unblock(uid) {
@@ -630,55 +533,270 @@ function BlockUserTool({ user, room, profiles }) {
   }
 
   const blockedUsers = myProfile?.blockedUsers || [];
-  const roomBlockedUsers = blockedUsers.filter((uid) => !room?.members || room.members.includes(uid));
 
   return (
     <>
-      <UserSearchDropdown
-        currentUser={user}
-        room={room}
-        mode="room-only"
-        icon={<UserX size={20} />}
-        buttonClassName="circle-tool-btn danger"
-        buttonTitle="Block user"
-        placeholder="Search username to block"
-        onSelect={block}
-        disabledUserIds={blockedUsers}
-      />
+      <button
+        className={open ? "circle-tool-btn danger active" : "circle-tool-btn danger"}
+        onClick={() => setOpen((v) => !v)}
+        title="Block user"
+        aria-label="Block user"
+      >
+        <UserX size={20} />
+      </button>
 
-      {roomBlockedUsers.length > 0 && (
+      {open && (
+        <form className="floating-tool-form" onSubmit={blockByEmail}>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Block by email"
+            autoFocus
+          />
+          <button className="primary-btn small-btn danger-btn">Block</button>
+          {message && <small className="tool-message">{message}</small>}
+        </form>
+      )}
+
+      {open && blockedUsers.length > 0 && (
         <div className="blocked-list">
-          <button type="button" className="blocked-manager-toggle" onClick={() => setManagerOpen((v) => !v)}>
-            {roomBlockedUsers.length} blocked
-          </button>
-
-          {managerOpen && (
-            <div className="blocked-manager-popover">
-              {roomBlockedUsers.map((uid) => {
-                const profile = profiles?.[uid] || {};
-                return (
-                  <button key={uid} type="button" onClick={() => unblock(uid)}>
-                    {profile.photoURL ? (
-                      <img src={profile.photoURL} alt={profile.username || "blocked user"} />
-                    ) : (
-                      <span className="lookup-avatar-fallback">
-                        {(profile.username || profile.email || "?").charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                    <span>
-                      <strong>{profile.username || uid.slice(0, 6)}</strong>
-                      <small>Click to unblock</small>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {blockedUsers.map((uid) => (
+            <button key={uid} type="button" onClick={() => unblock(uid)}>
+              Unblock {uid.slice(0, 6)}
+            </button>
+          ))}
         </div>
       )}
     </>
   );
 }
+
+
+function AvatarView({ profile, className = "member-avatar" }) {
+  const label = profile?.username || profile?.email || "?";
+  if (profile?.photoURL) {
+    return <img className={className} src={profile.photoURL} alt={label} />;
+  }
+
+  return <span className={`${className} avatar-fallback`}>{label.charAt(0).toUpperCase()}</span>;
+}
+
+function InlineUserSearch({ currentUser, room, disabledUserIds = [], placeholder, onSelect }) {
+  const [keyword, setKeyword] = useState("");
+  const [results, setResults] = useState([]);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function searchUsers() {
+      const key = keyword.trim().toLowerCase();
+      setMessage("");
+
+      if (!key) {
+        setResults([]);
+        return;
+      }
+
+      try {
+        const snap = await getDocs(collection(db, "users"));
+        const rows = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((u) => {
+            if (u.id === currentUser?.uid) return false;
+            if (disabledUserIds.includes(u.id)) return false;
+
+            const username = (u.username || "").toLowerCase();
+            const email = (u.email || "").toLowerCase();
+            const uid = (u.id || "").toLowerCase();
+
+            return username.includes(key) || email.includes(key) || uid.includes(key);
+          })
+          .slice(0, 8);
+
+        if (!cancelled) setResults(rows);
+      } catch (err) {
+        if (!cancelled) setMessage(err.message);
+      }
+    }
+
+    const timer = setTimeout(searchUsers, 160);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [keyword, currentUser?.uid, disabledUserIds]);
+
+  async function pick(userProfile) {
+    try {
+      await onSelect(userProfile);
+      setKeyword("");
+      setResults([]);
+      setMessage("Invited.");
+      setTimeout(() => setMessage(""), 1200);
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  return (
+    <div className="inline-user-search">
+      <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder={placeholder} />
+      {message && <small className="tool-message">{message}</small>}
+
+      {keyword.trim() && (
+        <div className="member-search-results">
+          {results.length === 0 ? (
+            <div className="lookup-empty">No matching users.</div>
+          ) : (
+            results.map((u) => (
+              <button key={u.id} type="button" className="member-search-row" onClick={() => pick(u)}>
+                <AvatarView profile={u} className="lookup-avatar" />
+                <span>
+                  <strong>{u.username || "Unnamed user"}</strong>
+                  <small>{u.email || u.id}</small>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberProfileModal({ profile, onClose }) {
+  if (!profile) return null;
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Member profile">
+      <section className="modal-card member-profile-card slide-up">
+        <button className="close-btn" onClick={onClose} aria-label="Close member profile">
+          <X size={18} />
+        </button>
+
+        <div className="member-profile-hero">
+          <AvatarView profile={profile} className="member-profile-avatar" />
+          <div>
+            <h2>{profile.username || "Unnamed user"}</h2>
+            <p>{profile.email || "No email"}</p>
+          </div>
+        </div>
+
+        <div className="member-profile-fields">
+          <div>
+            <span>Phone</span>
+            <strong>{profile.phone || "Not provided"}</strong>
+          </div>
+          <div>
+            <span>Address</span>
+            <strong>{profile.address || "Not provided"}</strong>
+          </div>
+          <div>
+            <span>User ID</span>
+            <strong>{profile.uid || profile.id || "Unknown"}</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RoomMembersModal({ user, room, profiles, myProfile, onClose, onOpenProfile }) {
+  const blockedUsers = myProfile?.blockedUsers || [];
+  const members = (room?.members || []).map((uid) => ({
+    uid,
+    profile: profiles[uid] || { uid, username: "Loading..." }
+  }));
+
+  async function inviteMember(targetUser) {
+    await updateDoc(doc(db, "rooms", room.id), {
+      members: arrayUnion(targetUser.id)
+    });
+  }
+
+  async function blockMember(uid) {
+    if (uid === user.uid) return;
+    await setDoc(
+      doc(db, "users", user.uid),
+      { blockedUsers: arrayUnion(uid), updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+
+  async function unblockMember(uid) {
+    await updateDoc(doc(db, "users", user.uid), {
+      blockedUsers: arrayRemove(uid),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Room members">
+      <section className="modal-card room-members-modal slide-up">
+        <button className="close-btn" onClick={onClose} aria-label="Close room members">
+          <X size={18} />
+        </button>
+
+        <header className="members-modal-header">
+          <div>
+            <span className="eyebrow">Room members</span>
+            <h2>{room?.name || "Chatroom"}</h2>
+            <p>{members.length} members · click an avatar to view profile</p>
+          </div>
+        </header>
+
+        <section className="member-invite-section">
+          <h3>Invite by profile name</h3>
+          <InlineUserSearch
+            currentUser={user}
+            room={room}
+            disabledUserIds={room?.members || []}
+            placeholder="Search username or email"
+            onSelect={inviteMember}
+          />
+        </section>
+
+        <section className="members-grid">
+          {members.map(({ uid, profile }) => {
+            const isMe = uid === user.uid;
+            const isBlocked = blockedUsers.includes(uid);
+
+            return (
+              <article key={uid} className={isBlocked ? "member-card blocked" : "member-card"}>
+                <button
+                  type="button"
+                  className="member-avatar-button"
+                  onClick={() => onOpenProfile({ id: uid, uid, ...profile })}
+                  aria-label={`Open ${profile.username || profile.email || uid} profile`}
+                >
+                  <AvatarView profile={profile} />
+                </button>
+
+                <div className="member-info">
+                  <strong>{profile.username || profile.email || "Unknown"}</strong>
+                  <small>{isMe ? "You" : profile.email || uid}</small>
+                  {isBlocked && <span className="member-status blocked">Blocked</span>}
+                </div>
+
+                {!isMe && (
+                  <button
+                    type="button"
+                    className={isBlocked ? "member-action unblock" : "member-action block"}
+                    onClick={() => (isBlocked ? unblockMember(uid) : blockMember(uid))}
+                  >
+                    {isBlocked ? "Unblock" : "Block"}
+                  </button>
+                )}
+              </article>
+            );
+          })}
+        </section>
+      </section>
+    </div>
+  );
+}
+
 
 function ChatMessage({ message, user, profiles, onEdit, onReply, onFocusReply }) {
   const mine = message.senderId === user.uid;
@@ -754,6 +872,8 @@ function ChatWindow({ user, roomId }) {
   const [replyTo, setReplyTo] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [viewingMember, setViewingMember] = useState(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -947,11 +1067,11 @@ function ChatWindow({ user, roomId }) {
   return (
     <section className="chat-panel" aria-label="Chat panel">
       <header className="chat-header">
-        <div>
+        <button type="button" className="room-summary-button" onClick={() => setMembersOpen(true)}>
           <span className="eyebrow">Current room</span>
           <h2>{room?.name || "Chatroom"}</h2>
-          <p>{room?.members?.length || 0} members</p>
-        </div>
+          <p>{room?.members?.length || 0} members · manage members</p>
+        </button>
 
         <button className="ghost-btn notification-btn" onClick={askNotificationPermission}>
           <Bell size={16} />
@@ -959,10 +1079,22 @@ function ChatWindow({ user, roomId }) {
         </button>
       </header>
 
-      <div className="chat-tools" aria-label="Chat tools">
-        <InviteMember roomId={roomId} room={room} user={user} />
-        <BlockUserTool user={user} room={room} profiles={profiles} />
+      {membersOpen && (
+        <RoomMembersModal
+          user={user}
+          room={room}
+          profiles={profiles}
+          myProfile={myProfile}
+          onClose={() => setMembersOpen(false)}
+          onOpenProfile={setViewingMember}
+        />
+      )}
 
+      {viewingMember && (
+        <MemberProfileModal profile={viewingMember} onClose={() => setViewingMember(null)} />
+      )}
+
+      <div className="chat-tools" aria-label="Chat tools">
         <button
           className={searchOpen ? "circle-tool-btn active" : "circle-tool-btn"}
           onClick={() => {

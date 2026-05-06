@@ -1037,224 +1037,276 @@ p {
     width: 100%;
   }
 }
-/* ===== block user bonus feature ===== */
 
-.circle-tool-btn.danger {
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.22);
-  border-color: rgba(248, 113, 113, 0.22);
+/* ===== room members management modal ===== */
+
+.room-summary-button {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  padding: 0;
 }
 
-.circle-tool-btn.danger:hover,
-.circle-tool-btn.danger.active {
-  color: #ffffff;
-  background: rgba(185, 28, 28, 0.58);
-  border-color: rgba(248, 113, 113, 0.42);
+.room-summary-button:hover h2,
+.room-summary-button:hover p {
+  color: #c7d2fe;
 }
 
-.danger-btn {
-  background: linear-gradient(135deg, #dc2626, #ef4444);
-  box-shadow: 0 14px 30px rgba(220, 38, 38, 0.24);
+.room-summary-button p {
+  transition: color 0.18s ease;
 }
 
-.block-warning {
-  flex-shrink: 0;
-  margin: 12px 24px 0;
-  padding: 10px 12px;
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.22);
-  border: 1px solid rgba(248, 113, 113, 0.24);
-  border-radius: 12px;
-  font-size: 13px;
+.room-members-modal {
+  width: min(860px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 28px));
+  padding: 24px;
 }
 
-.blocked-list {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
+.members-modal-header {
+  padding-right: 42px;
+  margin-bottom: 18px;
 }
 
-.blocked-list button {
-  white-space: nowrap;
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.22);
-  border: 1px solid rgba(248, 113, 113, 0.22);
-  border-radius: 999px;
-  padding: 8px 10px;
+.members-modal-header h2 {
+  font-size: 30px;
+  letter-spacing: -0.04em;
 }
 
-.composer.disabled {
-  opacity: 0.72;
+.members-modal-header p {
+  color: var(--muted);
+  margin-top: 6px;
 }
 
-.composer.disabled .icon-upload {
-  pointer-events: none;
-}
-/* ===== username / avatar dropdown for invite + block ===== */
-
-.user-lookup {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-}
-
-.user-lookup-popover {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  z-index: 60;
-  width: min(340px, 76vw);
-  padding: 12px;
+.member-invite-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.98);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
-  backdrop-filter: blur(18px);
+  background: rgba(15, 23, 42, 0.55);
+  margin-bottom: 16px;
 }
 
-.user-lookup-popover input {
-  height: 40px;
-  margin-bottom: 10px;
-  background: rgba(2, 6, 23, 0.88);
+.member-invite-section h3 {
+  font-size: 14px;
+  color: var(--text-soft);
 }
 
-.lookup-results {
+.inline-user-search {
+  position: relative;
   display: grid;
   gap: 8px;
-  max-height: 280px;
-  overflow-y: auto;
 }
 
-.lookup-user,
-.blocked-manager-popover button {
+.member-search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 8px;
+  background: rgba(17, 24, 39, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.member-search-row {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 10px;
-  text-align: left;
   color: var(--text);
   background: transparent;
-  border: 1px solid transparent;
   border-radius: 12px;
+  text-align: left;
 }
 
-.lookup-user:hover,
-.blocked-manager-popover button:hover {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: var(--line);
+.member-search-row:hover {
+  background: rgba(79, 124, 255, 0.16);
 }
 
-.lookup-user img,
-.blocked-manager-popover img,
-.lookup-avatar-fallback {
+.lookup-avatar,
+.member-avatar,
+.member-profile-avatar {
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.lookup-avatar {
   width: 34px;
   height: 34px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  object-fit: cover;
 }
 
-.lookup-avatar-fallback {
+.member-avatar {
+  width: 48px;
+  height: 48px;
+}
+
+.member-profile-avatar {
+  width: 82px;
+  height: 82px;
+}
+
+.avatar-fallback {
   display: grid;
   place-items: center;
-  color: #fff;
-  font-size: 13px;
+  color: white;
   font-weight: 900;
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
 }
 
-.lookup-user span,
-.blocked-manager-popover button span {
-  min-width: 0;
+.member-search-row span:not(.lookup-avatar):not(.avatar-fallback) {
   display: grid;
   gap: 2px;
 }
 
-.lookup-user strong,
-.blocked-manager-popover strong {
+.member-search-row small {
+  color: var(--muted);
+}
+
+.members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.member-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.member-card.blocked {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.15);
+}
+
+.member-avatar-button {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.member-avatar-button:hover {
+  outline: 2px solid rgba(79, 124, 255, 0.45);
+}
+
+.member-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.member-info strong,
+.member-info small {
   overflow: hidden;
-  color: var(--text);
-  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lookup-user small,
-.blocked-manager-popover small,
-.lookup-empty {
-  overflow: hidden;
+.member-info small {
+  color: var(--muted);
+}
+
+.member-status.blocked {
+  width: fit-content;
+  margin-top: 4px;
+  padding: 3px 8px;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.35);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.member-action {
+  grid-column: 1 / -1;
+  height: 34px;
+  border-radius: 11px;
+  font-weight: 800;
+}
+
+.member-action.block {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.28);
+  border: 1px solid rgba(248, 113, 113, 0.24);
+}
+
+.member-action.unblock {
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, 0.28);
+  border: 1px solid rgba(34, 197, 94, 0.24);
+}
+
+.member-profile-card {
+  width: min(460px, calc(100vw - 28px));
+}
+
+.member-profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-right: 38px;
+}
+
+.member-profile-hero h2 {
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+.member-profile-hero p {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.member-profile-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.member-profile-fields div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.member-profile-fields span {
   color: var(--muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.lookup-empty {
-  padding: 10px 6px 4px;
-}
-
-.blocked-list {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-}
-
-.blocked-manager-toggle {
-  height: 40px;
-  padding: 0 12px;
-  white-space: nowrap;
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.22);
-  border: 1px solid rgba(248, 113, 113, 0.22);
-  border-radius: 999px;
-}
-
-.blocked-manager-toggle:hover {
-  color: white;
-  background: rgba(185, 28, 28, 0.4);
-}
-
-.blocked-manager-popover {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  z-index: 61;
-  width: min(320px, 76vw);
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid rgba(248, 113, 113, 0.22);
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.98);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
-}
-
-.circle-tool-btn.danger {
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.22);
-  border-color: rgba(248, 113, 113, 0.22);
-}
-
-.circle-tool-btn.danger:hover,
-.circle-tool-btn.danger.active {
-  color: #ffffff;
-  background: rgba(185, 28, 28, 0.58);
-  border-color: rgba(248, 113, 113, 0.42);
+.member-profile-fields strong {
+  word-break: break-word;
 }
 
 @media (max-width: 720px) {
-  .user-lookup {
-    position: static;
+  .members-grid {
+    grid-template-columns: 1fr;
   }
 
-  .user-lookup-popover,
-  .blocked-manager-popover {
-    left: 10px;
-    right: 10px;
-    width: auto;
+  .room-members-modal {
+    padding: 18px;
   }
 }
