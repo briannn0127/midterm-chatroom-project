@@ -26,7 +26,6 @@ import {
   updateDoc,
   where
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   Bell,
   Edit2,
@@ -42,7 +41,7 @@ import {
   UserX,
   X
 } from "lucide-react";
-import { auth, db, googleProvider, storage } from "./firebase/config";
+import { auth, db, googleProvider } from "./firebase/config";
 import "./styles/app.css";
 
 const defaultProfile = (user) => ({
@@ -72,6 +71,43 @@ function formatTime(value) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit"
+  });
+}
+
+
+function compressImageToDataUrl(file, maxWidth = 900, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const img = new window.Image();
+
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+        if (dataUrl.length > 850000) {
+          reject(new Error("Image is still too large after compression. Please choose a smaller image."));
+          return;
+        }
+
+        resolve(dataUrl);
+      };
+
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 }
 
@@ -225,6 +261,7 @@ function ProfileModal({ user, onClose }) {
     photoURL: ""
   });
   const [file, setFile] = useState(null);
+  const [avatarFileName, setAvatarFileName] = useState("");
   const [saving, setSaving] = useState(false);
   const firstInputRef = useRef(null);
 
@@ -246,9 +283,7 @@ function ProfileModal({ user, onClose }) {
       let photoURL = profile.photoURL || "";
 
       if (file) {
-        const fileRef = ref(storage, `profiles/${user.uid}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        photoURL = await getDownloadURL(fileRef);
+        photoURL = await compressImageToDataUrl(file, 600, 0.72);
       }
 
       await setDoc(
@@ -266,7 +301,7 @@ function ProfileModal({ user, onClose }) {
         { merge: true }
       );
 
-      await updateProfile(user, { displayName: profile.username, photoURL });
+      await updateProfile(user, { displayName: profile.username });
       onClose();
     } catch (err) {
       alert(`Profile update failed: ${err.message}`);
@@ -292,7 +327,26 @@ function ProfileModal({ user, onClose }) {
 
           <label>
             Profile picture
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+
+            <div className="avatar-upload-row">
+              <label className="avatar-upload-btn">
+                Upload avatar
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0] || null;
+                    setFile(selected);
+                    setAvatarFileName(selected ? selected.name : "");
+                  }}
+                />
+              </label>
+
+              <span className="avatar-file-name">
+                {avatarFileName || "No file selected"}
+              </span>
+            </div>
           </label>
 
           <label>
@@ -1096,9 +1150,7 @@ function ChatWindow({ user, roomId }) {
       let imageUrl = "";
 
       if (imageFile) {
-        const fileRef = ref(storage, `chat-images/${roomId}/${Date.now()}_${imageFile.name}`);
-        await uploadBytes(fileRef, imageFile);
-        imageUrl = await getDownloadURL(fileRef);
+        imageUrl = await compressImageToDataUrl(imageFile);
       }
 
       if (editing) {

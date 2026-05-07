@@ -1868,36 +1868,70 @@ p {
   font-weight: 800;
   line-height: 1.35;
 }
-/* ===== mobile room list fix ===== */
 
-@media (max-width: 860px) {
-  .app-shell {
-    grid-template-rows: auto minmax(0, 1fr) !important;
-    overflow-y: auto !important;
-  }
+/* ===== polished avatar upload ===== */
 
-  .sidebar {
-    height: auto !important;
-    max-height: none !important;
-  }
-
-  .room-list {
-    max-height: 120px;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .room-item {
-    width: 100% !important;
-  }
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  min-width: 0;
 }
 
-@media (max-width: 480px) {
-  .room-list {
-    max-height: 112px;
+.avatar-upload-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: linear-gradient(
+    135deg,
+    rgba(79, 110, 255, 0.95),
+    rgba(124, 92, 255, 0.95)
+  );
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+  box-shadow: 0 12px 30px rgba(79, 110, 255, 0.22);
+}
+
+.avatar-upload-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(165, 180, 252, 0.65);
+  box-shadow: 0 16px 36px rgba(99, 102, 241, 0.3);
+}
+
+.avatar-file-name {
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .avatar-upload-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .avatar-upload-btn {
+    width: 100%;
+  }
+
+  .avatar-file-name {
+    max-width: 100%;
   }
 }
